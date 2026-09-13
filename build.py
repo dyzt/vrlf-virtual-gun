@@ -22,6 +22,7 @@ CXX = "cl /nologo /std:c++17 /EHsc /W4 /O2 /MT /DUNICODE /D_UNICODE /DNOMINMAX /
 
 TEST_EXES = {
     "gun_device_tests": [],
+    "setup_pure_tests": [],
 }
 
 
@@ -89,6 +90,12 @@ def build_cli():
     run_msvc(f'{CXX} /DWINUHID_STATIC /I"{ROOT}" /I"{winuhid}" /I"{driver}" {srcs} /Fe:vgun_cli.exe', d)
 
 
+def build_probe():
+    d = out_dir("tools")
+    srcs = quoted(["tools/sign_probe.cpp", "setup/cert_sign.cpp", "setup/log.cpp"])
+    run_msvc(f'{CXX} /I"{ROOT}" {srcs} /Fe:sign_probe.exe /link crypt32.lib ncrypt.lib ole32.lib', d)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("target", nargs="?", default="tests")
@@ -98,6 +105,7 @@ def main():
         "tests": lambda: build_tests(),
         "driver": lambda: build_driver(args.version),
         "cli": lambda: build_cli(),
+        "probe": lambda: build_probe(),
     }
     if args.target not in targets:
         sys.exit(f"unknown target {args.target}")
