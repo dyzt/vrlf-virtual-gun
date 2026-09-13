@@ -41,3 +41,13 @@ Vendor `third_party/winuhid/*` and `driver/Public.h` into one directory, compile
 ## Licence
 
 MIT. Driver and user library derive from WinUHid (MIT); see `THIRD_PARTY_NOTICES.md`.
+
+## Verification 2026-09-13
+
+Dev PC, Windows 11 Pro 26200, Secure Boot on, test signing off, Smart App Control off.
+
+- `install` exit code 0; device `ROOT\SYSTEM\0008` Started under `oem88.inf`. A second `install` over the live install took the "existing install found" path and came back clean.
+- `signtool verify /pa` on `VRLFVirtualGun.dll` and `vrlfvirtualgun.cat`: both `Successfully verified` against the per-machine certificate, no private key left behind.
+- `tests/integration/smoke_cli.py`: `PASS`.
+- `tests/integration/test_installed_driver.py`: two lanes gave two VHF Raw Input mice, 22 events, two distinct handles, absolute moves and both buttons seen. `NOTES: duplicate VRLFGun0 from a second process -> ok=False err=87` (a second program asking for an instance ID in use is refused with ERROR_INVALID_PARAMETER). `PASS`.
+- `uninstall` exit code 0; certs 0, packages 0, devices 0, state key gone. The running installer was renamed aside and scheduled for delete at reboot.
