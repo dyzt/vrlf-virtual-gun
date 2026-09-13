@@ -1,0 +1,5 @@
+// WPP tracing is compiled out: this build runs cl directly, without tracewpp.
+#pragma once
+#define TraceEvents(...) ((void)0)
+#define WPP_INIT_TRACING(...) ((void)0)
+#define WPP_CLEANUP(...) ((void)0)
