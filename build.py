@@ -115,6 +115,37 @@ def build_setup(version):
              "crypt32.lib ncrypt.lib setupapi.lib newdev.lib advapi32.lib ole32.lib", d)
 
 
+PAYLOAD = [
+    ("build/setup/vrlf-virtual-gun-setup.exe", "vrlf-virtual-gun-setup.exe"),
+    ("build/package/driver/VRLFVirtualGun.dll", "driver/VRLFVirtualGun.dll"),
+    ("build/package/driver/VRLFVirtualGun.inf", "driver/VRLFVirtualGun.inf"),
+    ("build/package/driver/vrlfvirtualgun.cat", "driver/vrlfvirtualgun.cat"),
+    ("LICENSE", "LICENSE"),
+    ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
+]
+
+
+def build_package(version):
+    build_tests()
+    build_driver(version)
+    build_cli()
+    build_setup(version)
+    name = f"vrlf-virtual-gun-{version}"
+    stage = os.path.join(ROOT, "dist", name)
+    shutil.rmtree(stage, ignore_errors=True)
+    for src, rel in PAYLOAD:
+        dst = os.path.join(stage, rel.replace("/", os.sep))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(os.path.join(ROOT, src.replace("/", os.sep)), dst)
+    zip_path = os.path.join(ROOT, "dist", name + ".zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for _src, rel in PAYLOAD:
+            z.write(os.path.join(stage, rel.replace("/", os.sep)), rel)
+    digest = hashlib.sha256(open(zip_path, "rb").read()).hexdigest()
+    print(f"package {zip_path}")
+    print(f"sha256 {digest}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("target", nargs="?", default="tests")
@@ -126,6 +157,8 @@ def main():
         "cli": lambda: build_cli(),
         "probe": lambda: build_probe(),
         "setup": lambda: build_setup(args.version),
+        "package": lambda: build_package(args.version),
+        "all": lambda: build_package(args.version),
     }
     if args.target not in targets:
         sys.exit(f"unknown target {args.target}")
