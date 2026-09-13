@@ -49,6 +49,19 @@ size_t RemoveDevices() {
 
 bool InstallDriver(const std::wstring& inf_path, std::wstring& published_inf, bool& reboot, std::wstring& error) {
     RemoveDevices();
+
+    // Stage the package into the driver store FIRST and learn its published oemNN.inf name
+    // deterministically from the call that creates it, rather than from a devnode property
+    // read after the fact (which can fail and leave `published_inf` empty, orphaning the
+    // staged package: UninstallDriver only calls SetupUninstallOEMInfW when it has a name).
+    wchar_t dest_inf[MAX_PATH] = {};
+    PWSTR dest_name = nullptr;
+    if (!SetupCopyOEMInfW(inf_path.c_str(), nullptr, SPOST_PATH, 0, dest_inf, MAX_PATH, nullptr, &dest_name)) {
+        error = Err(L"SetupCopyOEMInfW");
+        return false;  // nothing staged, nothing to roll back
+    }
+    published_inf = dest_name;
+
     GUID class_guid;
     wchar_t class_name[MAX_CLASS_NAME_LEN];
     if (!SetupDiGetINFClassW(inf_path.c_str(), &class_guid, class_name, MAX_CLASS_NAME_LEN, nullptr)) {
@@ -72,19 +85,27 @@ bool InstallDriver(const std::wstring& inf_path, std::wstring& published_inf, bo
         SetupDiDestroyDeviceInfoList(set);
         return false;
     }
+    // The store already holds the package (staged above), so the original inf_path resolves
+    // to it whether or not the caller's staging folder still exists afterwards.
     BOOL need_reboot = FALSE;
     if (!UpdateDriverForPlugAndPlayDevicesW(nullptr, HARDWARE_ID, inf_path.c_str(), INSTALLFLAG_FORCE, &need_reboot)) {
         error = Err(L"UpdateDriverForPlugAndPlayDevicesW");
         SetupDiCallClassInstaller(DIF_REMOVE, set, &dev);
         SetupDiDestroyDeviceInfoList(set);
+        SetupUninstallOEMInfW(published_inf.c_str(), SUOI_FORCEDELETE, nullptr);  // don't leak the staged package
         return false;
     }
     reboot = need_reboot != FALSE;
+
+    // Cross-check only: DEVPKEY_Device_DriverInfPath should agree with the name SetupCopyOEMInfW
+    // handed back above. A mismatch or a failed read here never changes `published_inf` and
+    // never fails the install; it's a log line for the odd case, not a source of truth.
     wchar_t inf_name[MAX_PATH] = {};
     DEVPROPTYPE type = 0;
     if (SetupDiGetDevicePropertyW(set, &dev, &DEVPKEY_Device_DriverInfPath, &type,
-                                  reinterpret_cast<PBYTE>(inf_name), sizeof(inf_name), nullptr, 0)) {
-        published_inf = inf_name;
+                                  reinterpret_cast<PBYTE>(inf_name), sizeof(inf_name), nullptr, 0) &&
+        _wcsicmp(inf_name, published_inf.c_str()) != 0) {
+        Log(L"driver inf path reported as %ls (staged %ls)", inf_name, published_inf.c_str());
     }
     SetupDiDestroyDeviceInfoList(set);
     Log(L"driver installed (%ls)%ls", published_inf.c_str(), reboot ? L", reboot required" : L"");

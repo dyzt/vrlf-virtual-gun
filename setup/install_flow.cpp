@@ -24,8 +24,10 @@ int RunInstall(const std::wstring& payload_dir, const std::wstring& version) {
         RunUninstall();
     }
     const std::wstring dir = DefaultInstallDir();
-    // Every value is written BEFORE the step it describes, so a rollback can undo a half-done step.
-    WriteValue(L"InstallDir", dir);
+    // Every value is written BEFORE the step it describes, so a rollback can undo a half-done
+    // step. A failed WRITE is itself a Fail(): a value RunUninstall never sees is a step
+    // RunUninstall can never undo.
+    if (!WriteValue(L"InstallDir", dir)) return Fail(L"registry write InstallDir failed");
     std::wstring error;
     if (!CopyPayload(payload_dir, dir, error)) return Fail(error);
 
@@ -38,15 +40,15 @@ int RunInstall(const std::wstring& payload_dir, const std::wstring& version) {
     Log(L"signing key deleted");
     if (!signed_ok) return Fail(error);
 
-    WriteValue(L"CertThumbprint", cert.thumbprint);
+    if (!WriteValue(L"CertThumbprint", cert.thumbprint)) return Fail(L"registry write CertThumbprint failed");
     if (!TrustCertificate(cert.encoded, error)) return Fail(error);
 
     std::wstring published;
     bool reboot = false;
     if (!InstallDriver(driver_dir + L"\\VRLFVirtualGun.inf", published, reboot, error)) return Fail(error);
-    WriteValue(L"DriverInf", published);
+    if (!WriteValue(L"DriverInf", published)) return Fail(L"registry write DriverInf failed");
 
-    WriteValue(L"Version", version);
+    if (!WriteValue(L"Version", version)) return Fail(L"registry write Version failed");
     Log(L"VRLF Virtual Lightgun %ls installed", version.c_str());
     return reboot ? 3010 : 0;
 }
