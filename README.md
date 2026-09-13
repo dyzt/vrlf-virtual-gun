@@ -20,6 +20,8 @@ By hand: unzip a release, run `vrlf-virtual-gun-setup.exe install` as administra
 
 A fork of [WinUHid](https://github.com/cgutman/WinUHid) that creates exactly one kind of device: a 5-button absolute mouse (`shared/gun_device.h`). Any other report descriptor or VID/PID is refused. Interactive users may open it. A device is destroyed when the handle that created it closes, after its buttons are released, so a crashed client never leaves a game holding fire.
 
+The device reports VID `0x1209` (pid.codes) with PID `0x0001`, a pid.codes test PID. A project PID has been requested; v1.0.1 will carry it, with the same descriptor and behaviour.
+
 ## Security
 
 - The signing key is deleted during install; only files signed then chain to the trusted certificate.
