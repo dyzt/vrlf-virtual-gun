@@ -81,6 +81,14 @@ def build_driver(version):
                     "/os:10_X64,10_NI_X64,10_GE_X64"], check=True)
 
 
+def build_cli():
+    d = out_dir("tools")
+    srcs = quoted(["tools/vgun_cli.cpp", "third_party/winuhid/WinUHid.cpp"])
+    winuhid = os.path.join(ROOT, "third_party", "winuhid")
+    driver = os.path.join(ROOT, "driver")
+    run_msvc(f'{CXX} /DWINUHID_STATIC /I"{ROOT}" /I"{winuhid}" /I"{driver}" {srcs} /Fe:vgun_cli.exe', d)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("target", nargs="?", default="tests")
@@ -89,6 +97,7 @@ def main():
     targets = {
         "tests": lambda: build_tests(),
         "driver": lambda: build_driver(args.version),
+        "cli": lambda: build_cli(),
     }
     if args.target not in targets:
         sys.exit(f"unknown target {args.target}")
