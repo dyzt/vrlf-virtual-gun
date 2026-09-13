@@ -94,7 +94,13 @@ bool CreateSigningCert(SigningCert& out, std::wstring& error, bool machine_key) 
     st = NCryptCreatePersistedKey(prov, &out.key, BCRYPT_RSA_ALGORITHM, out.key_name.c_str(), 0, key_flags);
     if (st == ERROR_SUCCESS) {
         DWORD bits = 3072;
-        NCryptSetProperty(out.key, NCRYPT_LENGTH_PROPERTY, reinterpret_cast<PBYTE>(&bits), sizeof(bits), 0);
+        st = NCryptSetProperty(out.key, NCRYPT_LENGTH_PROPERTY, reinterpret_cast<PBYTE>(&bits), sizeof(bits), 0);
+        if (st != ERROR_SUCCESS) {
+            error = L"NCryptSetProperty length " + Hex32(st);
+            NCryptFreeObject(prov);
+            DestroySigningKey(out);
+            return false;
+        }
         // Export policy stays at its default of 0: the key can never leave the provider.
         st = NCryptFinalizeKey(out.key, 0);
     }
@@ -169,7 +175,11 @@ bool CreateSigningCert(SigningCert& out, std::wstring& error, bool machine_key) 
     out.encoded.assign(out.context->pbCertEncoded, out.context->pbCertEncoded + out.context->cbCertEncoded);
     BYTE hash[20];
     DWORD hash_len = sizeof(hash);
-    CertGetCertificateContextProperty(out.context, CERT_SHA1_HASH_PROP_ID, hash, &hash_len);
+    if (!CertGetCertificateContextProperty(out.context, CERT_SHA1_HASH_PROP_ID, hash, &hash_len)) {
+        error = L"certificate thumbprint " + Hex32(GetLastError());
+        DestroySigningKey(out);
+        return false;
+    }
     out.thumbprint = HexUpper(hash, hash_len);
     Log(L"signing certificate %ls created (%ls key)", out.thumbprint.c_str(), machine_key ? L"machine" : L"user");
     return true;
@@ -219,8 +229,10 @@ bool SignFile(const SigningCert& cert, const std::wstring& path, std::wstring& e
 
 void DestroySigningKey(SigningCert& cert) {
     if (cert.key != 0) {
-        // NCryptDeleteKey also frees the handle.
-        if (NCryptDeleteKey(cert.key, 0) != ERROR_SUCCESS) NCryptFreeObject(cert.key);
+        // NCryptDeleteKey invalidates the handle whether or not it succeeds; never
+        // fall back to NCryptFreeObject on it, or a failed delete double-frees.
+        const SECURITY_STATUS st = NCryptDeleteKey(cert.key, 0);
+        if (st != ERROR_SUCCESS) Log(L"NCryptDeleteKey 0x%08lX", st);
         cert.key = 0;
     }
     if (cert.context != nullptr) {
@@ -263,7 +275,11 @@ void RemoveTrustedCertificate(const std::wstring& thumbprint) {
         PCCERT_CONTEXT found = nullptr;
         while ((found = CertFindCertificateInStore(store, X509_ASN_ENCODING, 0, CERT_FIND_SHA1_HASH, &blob,
                                                    nullptr)) != nullptr) {
-            CertDeleteCertificateFromStore(found);  // frees `found`
+            const BOOL deleted = CertDeleteCertificateFromStore(found);  // frees `found` either way
+            if (!deleted) {
+                Log(L"certificate delete from LocalMachine\\%ls failed: %lu", store_name, GetLastError());
+                break;
+            }
             Log(L"certificate removed from LocalMachine\\%ls", store_name);
         }
         CertCloseStore(store, 0);
