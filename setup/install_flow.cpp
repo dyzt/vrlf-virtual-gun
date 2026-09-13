@@ -46,7 +46,13 @@ int RunInstall(const std::wstring& payload_dir, const std::wstring& version) {
     std::wstring published;
     bool reboot = false;
     if (!InstallDriver(driver_dir + L"\\VRLFVirtualGun.inf", published, reboot, error)) return Fail(error);
-    if (!WriteValue(L"DriverInf", published)) return Fail(L"registry write DriverInf failed");
+    if (!WriteValue(L"DriverInf", published)) {
+        // RunUninstall (inside Fail) can't learn `published` from the registry once this write
+        // has failed, so undo the driver install directly with the name InstallDriver just
+        // handed back, before the generic rollback runs.
+        UninstallDriver(published);
+        return Fail(L"registry write DriverInf failed");
+    }
 
     if (!WriteValue(L"Version", version)) return Fail(L"registry write Version failed");
     Log(L"VRLF Virtual Lightgun %ls installed", version.c_str());

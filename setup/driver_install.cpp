@@ -22,6 +22,17 @@ std::wstring Err(const wchar_t* what) {
     return buf;
 }
 
+// Removes a staged package from the driver store. Shared by every InstallDriver failure
+// branch that runs after SetupCopyOEMInfW has already staged one, and by UninstallDriver.
+void UnstagePackage(const std::wstring& published_inf) {
+    if (published_inf.empty()) return;
+    if (SetupUninstallOEMInfW(published_inf.c_str(), SUOI_FORCEDELETE, nullptr)) {
+        Log(L"driver package %ls deleted", published_inf.c_str());
+    } else {
+        Log(L"SetupUninstallOEMInfW %ls failed: %lu", published_inf.c_str(), GetLastError());
+    }
+}
+
 }  // namespace
 
 size_t RemoveDevices() {
@@ -66,11 +77,13 @@ bool InstallDriver(const std::wstring& inf_path, std::wstring& published_inf, bo
     wchar_t class_name[MAX_CLASS_NAME_LEN];
     if (!SetupDiGetINFClassW(inf_path.c_str(), &class_guid, class_name, MAX_CLASS_NAME_LEN, nullptr)) {
         error = Err(L"SetupDiGetINFClassW");
+        UnstagePackage(published_inf);
         return false;
     }
     HDEVINFO set = SetupDiCreateDeviceInfoList(&class_guid, nullptr);
     if (set == INVALID_HANDLE_VALUE) {
         error = Err(L"SetupDiCreateDeviceInfoList");
+        UnstagePackage(published_inf);
         return false;
     }
     SP_DEVINFO_DATA dev{sizeof(SP_DEVINFO_DATA)};
@@ -83,6 +96,7 @@ bool InstallDriver(const std::wstring& inf_path, std::wstring& published_inf, bo
     if (!ok) {
         error = Err(L"create root device");
         SetupDiDestroyDeviceInfoList(set);
+        UnstagePackage(published_inf);
         return false;
     }
     // The store already holds the package (staged above), so the original inf_path resolves
@@ -92,7 +106,7 @@ bool InstallDriver(const std::wstring& inf_path, std::wstring& published_inf, bo
         error = Err(L"UpdateDriverForPlugAndPlayDevicesW");
         SetupDiCallClassInstaller(DIF_REMOVE, set, &dev);
         SetupDiDestroyDeviceInfoList(set);
-        SetupUninstallOEMInfW(published_inf.c_str(), SUOI_FORCEDELETE, nullptr);  // don't leak the staged package
+        UnstagePackage(published_inf);  // don't leak the staged package
         return false;
     }
     reboot = need_reboot != FALSE;
@@ -114,12 +128,7 @@ bool InstallDriver(const std::wstring& inf_path, std::wstring& published_inf, bo
 
 void UninstallDriver(const std::wstring& published_inf) {
     RemoveDevices();
-    if (published_inf.empty()) return;
-    if (SetupUninstallOEMInfW(published_inf.c_str(), SUOI_FORCEDELETE, nullptr)) {
-        Log(L"driver package %ls deleted", published_inf.c_str());
-    } else {
-        Log(L"SetupUninstallOEMInfW %ls failed: %lu", published_inf.c_str(), GetLastError());
-    }
+    UnstagePackage(published_inf);
 }
 
 }  // namespace setup
