@@ -96,6 +96,25 @@ def build_probe():
     run_msvc(f'{CXX} /I"{ROOT}" {srcs} /Fe:sign_probe.exe /link crypt32.lib ncrypt.lib ole32.lib', d)
 
 
+def build_setup(version):
+    d = out_dir("setup")
+    gen = out_dir("generated")
+    with open(os.path.join(gen, "version.h"), "w", encoding="utf-8") as f:
+        f.write(f'#pragma once\n#define VGUN_VERSION L"{version}"\n')
+    srcs = quoted([
+        "setup/main.cpp", "setup/install_flow.cpp", "setup/cert_sign.cpp",
+        "setup/driver_install.cpp", "setup/payload.cpp",
+        "setup/registry_state.cpp", "setup/log.cpp",
+    ])
+    # /MANIFEST:EMBED: bare /MANIFEST (the linker default) writes a side-by-side
+    # .manifest file instead, which Windows still honours but which a byte search
+    # of the exe itself would never find.
+    run_msvc(f'{CXX} /I"{ROOT}" /I"{gen}" {srcs} /Fe:vrlf-virtual-gun-setup.exe /link '
+             "/MANIFEST:EMBED "
+             "/MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\" "
+             "crypt32.lib ncrypt.lib setupapi.lib newdev.lib advapi32.lib ole32.lib", d)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("target", nargs="?", default="tests")
@@ -106,6 +125,7 @@ def main():
         "driver": lambda: build_driver(args.version),
         "cli": lambda: build_cli(),
         "probe": lambda: build_probe(),
+        "setup": lambda: build_setup(args.version),
     }
     if args.target not in targets:
         sys.exit(f"unknown target {args.target}")
