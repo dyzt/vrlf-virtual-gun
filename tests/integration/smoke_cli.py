@@ -8,8 +8,9 @@ from vgun_cli import GunCli  # noqa: E402
 
 def main():
     failures = []
-    cli = GunCli()
+    cli = None
     try:
+        cli = GunCli()
         ver = cli.version()
         print("version ->", ver)
         ok, err = cli.create(0)
@@ -31,7 +32,8 @@ def main():
         cli.quit()
     except Exception as e:  # noqa: BLE001
         failures.append(repr(e))
-        cli.kill()
+        if cli is not None:
+            cli.kill()
     print("PASS" if not failures else "FAIL: " + "; ".join(failures))
     return 0 if not failures else 1
 
