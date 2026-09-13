@@ -14,6 +14,7 @@ By hand: unzip a release, run `vrlf-virtual-gun-setup.exe install` as administra
 - Trusts the public certificate in `LocalMachine\Root` and `TrustedPublisher`.
 - Installs the `Root\VRLFVirtualGun` driver.
 - Records state under `HKLM\SOFTWARE\VRLF\VirtualGun`; uninstall removes all of it.
+- Uninstall renames a still-running installer aside and removes it at the next reboot, so a reinstall before that reboot is safe.
 
 ## What the driver does
 

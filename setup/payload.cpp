@@ -64,8 +64,30 @@ void RemoveInstallDir(const std::wstring& dir) {
     for (const auto& entry : std::filesystem::recursive_directory_iterator(dir, ec)) {
         if (entry.is_regular_file(ec)) files.push_back(entry.path());
     }
+
+    // A prior cycle may have renamed a running exe aside and still be waiting on its reboot
+    // deletion; clear any such leftover now so repeated install/uninstall cycles don't
+    // accumulate ".old" files.
     for (const auto& file : files) {
-        if (!DeleteFileW(file.c_str())) MoveFileExW(file.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
+        if (file.extension() != L".old") continue;
+        if (!DeleteFileW(file.c_str())) Log(L"stale %ls still pending; leaving it", file.c_str());
+    }
+
+    for (const auto& file : files) {
+        if (file.extension() == L".old") continue;
+        if (DeleteFileW(file.c_str())) continue;
+        // In use (most likely this exe, running as `<dir>\...setup.exe uninstall`). Rename it
+        // out of the way first -- Windows allows renaming a running executable -- so a
+        // reinstall before the next reboot copies a fresh file to the original path instead of
+        // reusing the one this pending delete will remove.
+        const std::wstring old_path = file.wstring() + L".old";
+        if (MoveFileExW(file.c_str(), old_path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            MoveFileExW(old_path.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
+            Log(L"scheduled %ls for deletion at reboot", old_path.c_str());
+        } else {
+            MoveFileExW(file.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
+            Log(L"failed to rename %ls aside; scheduled original for deletion at reboot", file.c_str());
+        }
     }
     std::filesystem::remove(std::filesystem::path(dir) / L"driver", ec);
     if (!RemoveDirectoryW(dir.c_str())) MoveFileExW(dir.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
