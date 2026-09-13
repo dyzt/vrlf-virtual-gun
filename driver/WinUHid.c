@@ -1259,6 +1259,8 @@ void WinUHidEvtDeviceFileClose(
     PFILE_CONTEXT fileContext = FileGetContext(FileObject);
     VHFHANDLE vhfHandle;
     WDFOBJECT op;
+    BOOLEAN releaseButtons;
+    UCHAR release[VGUN_REPORT_BYTES];
 
     //
     // Lock the queues and start rundown
@@ -1270,6 +1272,15 @@ void WinUHidEvtDeviceFileClose(
     //
     vhfHandle = fileContext->VhfHandle;
     fileContext->VhfHandle = NULL;
+
+    //
+    // VRLF fork: snapshot the last report under RequestLock, since
+    // WinUHidEvtIoWrite runs on a parallel queue and can race this close.
+    // Submit from the local copy after the lock is released, never inside it.
+    //
+    releaseButtons = fileContext->LastReportValid && fileContext->LastReport[0] != 0;
+    memcpy(release, fileContext->LastReport, VGUN_REPORT_BYTES);
+    release[0] = 0;  // byte 0 is the button byte (shared/gun_device.h)
 
     //
     // Rundown both queues and complete all requests
@@ -1300,13 +1311,12 @@ void WinUHidEvtDeviceFileClose(
     WdfWaitLockRelease(fileContext->RequestLock);
 
     if (vhfHandle) {
-        if (fileContext->LastReportValid && fileContext->LastReport[0] != 0) {
-            HID_XFER_PACKET release;
-            fileContext->LastReport[0] = 0;  // byte 0 is the button byte (shared/gun_device.h)
-            release.reportId = 0;
-            release.reportBufferLen = VGUN_REPORT_BYTES;
-            release.reportBuffer = fileContext->LastReport;
-            VhfReadReportSubmit(vhfHandle, &release);  // best effort: the device is going away
+        if (releaseButtons) {
+            HID_XFER_PACKET releasePkt;
+            releasePkt.reportId = 0;
+            releasePkt.reportBufferLen = VGUN_REPORT_BYTES;
+            releasePkt.reportBuffer = release;
+            VhfReadReportSubmit(vhfHandle, &releasePkt);  // best effort: the device is going away
         }
         VhfDelete(vhfHandle, TRUE);
     }
@@ -1366,8 +1376,14 @@ void WinUHidEvtIoWrite(
     }
 
     if (Length == VGUN_REPORT_BYTES) {
+        //
+        // VRLF fork: WinUHidEvtIoWrite runs on a parallel queue, so guard
+        // this snapshot against a racing close (or another concurrent write).
+        //
+        WdfWaitLockAcquire(fileContext->RequestLock, NULL);
         memcpy(fileContext->LastReport, inputBuffer, VGUN_REPORT_BYTES);
         fileContext->LastReportValid = TRUE;
+        WdfWaitLockRelease(fileContext->RequestLock);
     }
 
     WdfRequestCompleteWithInformation(Request, status, Length);
