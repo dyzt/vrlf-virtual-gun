@@ -9,6 +9,14 @@ WNDPROC = ctypes.WINFUNCTYPE(LRESULT, W.HWND, W.UINT, W.WPARAM, W.LPARAM)
 _u.DefWindowProcW.argtypes = [W.HWND, W.UINT, W.WPARAM, W.LPARAM]
 _u.DefWindowProcW.restype = LRESULT
 _u.CreateWindowExW.restype = W.HWND
+_u.GetRawInputDeviceInfoW.argtypes = [W.HANDLE, W.UINT, ctypes.c_void_p, ctypes.POINTER(W.UINT)]
+_u.GetRawInputDeviceInfoW.restype = W.UINT
+_u.GetRawInputDeviceList.argtypes = [ctypes.c_void_p, ctypes.POINTER(W.UINT), W.UINT]
+_u.GetRawInputDeviceList.restype = W.UINT
+_u.GetRawInputData.argtypes = [W.HANDLE, W.UINT, ctypes.c_void_p, ctypes.POINTER(W.UINT), W.UINT]
+_u.GetRawInputData.restype = W.UINT
+_u.RegisterRawInputDevices.argtypes = [ctypes.c_void_p, W.UINT, W.UINT]
+_u.RegisterRawInputDevices.restype = W.BOOL
 VHF_MARK = "HID_DEVICE_SYSTEM_VHF"
 # Windows reports a 0..32767 absolute device as 0..65535.
 RAW_PER_DEVICE_UNIT = 65535 / 32767
@@ -59,7 +67,8 @@ def vhf_mice():
     _u.GetRawInputDeviceList(None, ctypes.byref(count), ctypes.sizeof(RAWINPUTDEVICELIST))
     arr = (RAWINPUTDEVICELIST * count.value)()
     _u.GetRawInputDeviceList(arr, ctypes.byref(count), ctypes.sizeof(RAWINPUTDEVICELIST))
-    return [device_name(d.hDevice) for d in arr if d.dwType == 0 and VHF_MARK in device_name(d.hDevice)]
+    names = (device_name(d.hDevice) for d in arr if d.dwType == 0)
+    return [n for n in names if VHF_MARK in n]
 
 
 class Watcher:
