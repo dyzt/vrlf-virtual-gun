@@ -14,6 +14,7 @@ By hand: unzip a release, run `vrlf-virtual-gun-setup.exe install` as administra
 - Trusts the public certificate in `LocalMachine\Root` and `TrustedPublisher`.
 - Installs the `Root\VRLFVirtualGun` driver.
 - Records state under `HKLM\SOFTWARE\VRLF\VirtualGun`; uninstall removes all of it.
+- Over an existing install, updates in place: the device node is kept and only the driver, certificate and package are replaced, so the Raw Input device paths games have bound (TeknoParrot's RawInput API) stay the same. An incomplete or damaged install is removed and reinstalled instead, which changes those paths.
 - Uninstall renames a still-running installer aside and removes it at the next reboot, so a reinstall before that reboot is safe.
 
 ## What the driver does
@@ -32,9 +33,10 @@ The device reports VID `0x1209` (pid.codes) with PID `0x5647`, requested from pi
 Needs MSVC 2026, WDK 10.0.26100 and Python 3.
 
 - `python build.py tests`
-- `python build.py package --version 1.0.1`
+- `python build.py package --version 1.0.2`
 - `python build.py cli` then `python tests/integration/smoke_cli.py` (no admin)
 - `python tests/integration/test_installed_driver.py` (driver installed)
+- `python tests/integration/lane_paths.py save`, install an update, then `python tests/integration/lane_paths.py compare`
 
 ## Using the driver from your own program
 

@@ -22,18 +22,41 @@ std::wstring Err(const wchar_t* what) {
     return buf;
 }
 
-// Removes a staged package from the driver store. Shared by every InstallDriver failure
-// branch that runs after SetupCopyOEMInfW has already staged one, and by UninstallDriver.
-void UnstagePackage(const std::wstring& published_inf) {
-    if (published_inf.empty()) return;
-    if (SetupUninstallOEMInfW(published_inf.c_str(), SUOI_FORCEDELETE, nullptr)) {
-        Log(L"driver package %ls deleted", published_inf.c_str());
-    } else {
-        Log(L"SetupUninstallOEMInfW %ls failed: %lu", published_inf.c_str(), GetLastError());
+bool IsOurDevice(HDEVINFO set, SP_DEVINFO_DATA& dev) {
+    wchar_t ids[1024] = {};
+    if (!SetupDiGetDeviceRegistryPropertyW(set, &dev, SPDRP_HARDWAREID, nullptr,
+                                           reinterpret_cast<PBYTE>(ids), sizeof(ids) - sizeof(wchar_t), nullptr)) {
+        return false;
     }
+    return _wcsicmp(ids, HARDWARE_ID) == 0;
 }
 
 }  // namespace
+
+// Shared by every InstallDriver failure branch that runs after SetupCopyOEMInfW has already
+// staged one, by the in-place update, and by UninstallDriver.
+bool UnstagePackage(const std::wstring& published_inf) {
+    if (published_inf.empty()) return true;
+    if (SetupUninstallOEMInfW(published_inf.c_str(), SUOI_FORCEDELETE, nullptr)) {
+        Log(L"driver package %ls deleted", published_inf.c_str());
+        return true;
+    }
+    Log(L"SetupUninstallOEMInfW %ls failed: %lu", published_inf.c_str(), GetLastError());
+    return false;
+}
+
+size_t CountDevices(bool present_only) {
+    const DWORD flags = DIGCF_ALLCLASSES | (present_only ? DIGCF_PRESENT : 0);
+    HDEVINFO set = SetupDiGetClassDevsW(nullptr, nullptr, nullptr, flags);
+    if (set == INVALID_HANDLE_VALUE) return 0;
+    size_t count = 0;
+    SP_DEVINFO_DATA dev{sizeof(SP_DEVINFO_DATA)};
+    for (DWORD i = 0; SetupDiEnumDeviceInfo(set, i, &dev); ++i) {
+        if (IsOurDevice(set, dev)) ++count;
+    }
+    SetupDiDestroyDeviceInfoList(set);
+    return count;
+}
 
 size_t RemoveDevices() {
     HDEVINFO set = SetupDiGetClassDevsW(nullptr, nullptr, nullptr, DIGCF_ALLCLASSES);
@@ -41,12 +64,7 @@ size_t RemoveDevices() {
     size_t removed = 0;
     SP_DEVINFO_DATA dev{sizeof(SP_DEVINFO_DATA)};
     for (DWORD i = 0; SetupDiEnumDeviceInfo(set, i, &dev); ++i) {
-        wchar_t ids[1024] = {};
-        if (!SetupDiGetDeviceRegistryPropertyW(set, &dev, SPDRP_HARDWAREID, nullptr,
-                                               reinterpret_cast<PBYTE>(ids), sizeof(ids) - sizeof(wchar_t), nullptr)) {
-            continue;
-        }
-        if (_wcsicmp(ids, HARDWARE_ID) != 0) continue;
+        if (!IsOurDevice(set, dev)) continue;
         if (DiUninstallDevice(nullptr, set, &dev, 0, nullptr)) {
             ++removed;
         } else {
@@ -58,20 +76,36 @@ size_t RemoveDevices() {
     return removed;
 }
 
-bool InstallDriver(const std::wstring& inf_path, std::wstring& published_inf, bool& reboot, std::wstring& error) {
-    RemoveDevices();
-
-    // Stage the package into the driver store FIRST and learn its published oemNN.inf name
-    // deterministically from the call that creates it, rather than from a devnode property
-    // read after the fact (which can fail and leave `published_inf` empty, orphaning the
-    // staged package: UninstallDriver only calls SetupUninstallOEMInfW when it has a name).
+// Stage the package into the driver store FIRST and learn its published oemNN.inf name
+// deterministically from the call that creates it, rather than from a devnode property read
+// after the fact (which can fail and leave `published_inf` empty, orphaning the staged
+// package: UninstallDriver only calls SetupUninstallOEMInfW when it has a name).
+bool StagePackage(const std::wstring& inf_path, std::wstring& published_inf, std::wstring& error) {
     wchar_t dest_inf[MAX_PATH] = {};
     PWSTR dest_name = nullptr;
     if (!SetupCopyOEMInfW(inf_path.c_str(), nullptr, SPOST_PATH, 0, dest_inf, MAX_PATH, nullptr, &dest_name)) {
         error = Err(L"SetupCopyOEMInfW");
-        return false;  // nothing staged, nothing to roll back
+        return false;
     }
     published_inf = dest_name;
+    return true;
+}
+
+bool UpdateDevice(const std::wstring& inf_path, bool& reboot, std::wstring& error) {
+    BOOL need_reboot = FALSE;
+    if (!UpdateDriverForPlugAndPlayDevicesW(nullptr, HARDWARE_ID, inf_path.c_str(), INSTALLFLAG_FORCE, &need_reboot)) {
+        error = Err(L"UpdateDriverForPlugAndPlayDevicesW");
+        return false;
+    }
+    reboot = need_reboot != FALSE;
+    Log(L"driver updated on the existing device node%ls", reboot ? L", reboot required" : L"");
+    return true;
+}
+
+bool InstallDriver(const std::wstring& inf_path, std::wstring& published_inf, bool& reboot, std::wstring& error) {
+    RemoveDevices();
+
+    if (!StagePackage(inf_path, published_inf, error)) return false;  // nothing staged, nothing to roll back
 
     GUID class_guid;
     wchar_t class_name[MAX_CLASS_NAME_LEN];

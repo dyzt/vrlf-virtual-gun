@@ -32,6 +32,10 @@ std::optional<InstallState> ReadState() {
     s.install_dir = ReadString(key, L"InstallDir");
     s.cert_thumbprint = ReadString(key, L"CertThumbprint");
     s.driver_inf = ReadString(key, L"DriverInf");
+    s.pending_cert_thumbprint = ReadString(key, L"PendingCertThumbprint");
+    s.pending_driver_inf = ReadString(key, L"PendingDriverInf");
+    s.previous_cert_thumbprint = ReadString(key, L"PreviousCertThumbprint");
+    s.previous_driver_inf = ReadString(key, L"PreviousDriverInf");
     RegCloseKey(key);
     return s;
 }
@@ -47,6 +51,10 @@ bool WriteValue(const wchar_t* name, const std::wstring& value) {
                                       static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
     RegCloseKey(key);
     return st == ERROR_SUCCESS;
+}
+
+void DeleteValue(const wchar_t* name) {
+    RegDeleteKeyValueW(HKEY_LOCAL_MACHINE, STATE_KEY, name);
 }
 
 void DeleteState() {

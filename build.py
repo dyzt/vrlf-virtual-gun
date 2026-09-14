@@ -149,7 +149,7 @@ def build_package(version):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("target", nargs="?", default="tests")
-    ap.add_argument("--version", default="1.0.1")
+    ap.add_argument("--version", default="1.0.2")
     args = ap.parse_args()
     targets = {
         "tests": lambda: build_tests(),
