@@ -12,6 +12,11 @@ TEST(descriptor_is_the_52_byte_absolute_mouse) {
     CHECK_EQ(VGUN_REPORT_DESCRIPTOR[43], 0x7F);  // Logical Maximum high byte: 32767
 }
 
+TEST(identity_is_the_project_pid_codes_pid) {
+    CHECK_EQ(VGUN_VID, 0x1209);
+    CHECK_EQ(VGUN_PID, 0x5647);
+}
+
 TEST(report_is_five_packed_bytes) {
     CHECK_EQ(sizeof(GunReport), VGUN_REPORT_BYTES);
     const GunReport r{0x05, 0x1234, 0x7FFF};

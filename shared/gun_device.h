@@ -6,7 +6,7 @@
  */
 
 #define VGUN_VID 0x1209            /* pid.codes open-source VID */
-#define VGUN_PID 0x0001            /* pid.codes test PID; swap for the assigned PID before a public release */
+#define VGUN_PID 0x5647            /* project PID requested from pid.codes; see README */
 #define VGUN_MAX_COORD 32767
 #define VGUN_BUTTON_MASK 0x1F      /* 5 buttons */
 #define VGUN_REPORT_BYTES 5
