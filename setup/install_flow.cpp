@@ -77,11 +77,27 @@ int RunUpdate(const InstallState& old, const std::wstring& payload_dir, const st
     bool reboot = false;
     if (!UpdateDevice(inf, reboot, error)) return FailUpdate(error, old, cert.thumbprint, published);
 
+    if (SameName(published, old.driver_inf)) {
+        // An identical INF (a same-version reinstall): the store handed back the package it
+        // already holds and kept that package's catalog, which the OLD cert signed. Retiring
+        // the old cert would leave the running driver signed by an untrusted certificate, so
+        // keep it and discard the new one instead.
+        RemoveTrustedCertificate(cert.thumbprint);
+        DeleteValue(L"PendingCertThumbprint");
+        DeleteValue(L"PendingDriverInf");
+        Log(L"driver store already held this package (%ls); kept its certificate", published.c_str());
+        if (!WriteValue(L"Version", version)) {
+            Log(L"update failed: registry write Version failed; run install again to repair");
+            return 1;
+        }
+        Log(L"VRLF Virtual Lightgun %ls reinstalled in place", version.c_str());
+        return reboot ? 3010 : 0;
+    }
+
     // The device runs the new package. Record the old pair as Previous* before promoting the
     // new one, so an interruption from here on leaves every cert and package recorded.
-    const bool same_inf = SameName(published, old.driver_inf);
     if (!WriteValue(L"PreviousCertThumbprint", old.cert_thumbprint) ||
-        (!same_inf && !WriteValue(L"PreviousDriverInf", old.driver_inf)) ||
+        !WriteValue(L"PreviousDriverInf", old.driver_inf) ||
         !WriteValue(L"CertThumbprint", cert.thumbprint) || !WriteValue(L"DriverInf", published)) {
         Log(L"update failed: registry write while promoting the new driver; run install again to repair");
         return 1;

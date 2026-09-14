@@ -37,6 +37,7 @@ Needs MSVC 2026, WDK 10.0.26100 and Python 3.
 - `python build.py cli` then `python tests/integration/smoke_cli.py` (no admin)
 - `python tests/integration/test_installed_driver.py` (driver installed)
 - `python tests/integration/lane_paths.py save`, install an update, then `python tests/integration/lane_paths.py compare`
+- `python tests/integration/check_store_signature.py` (the driver store copy is signed by the one trusted certificate)
 
 ## Using the driver from your own program
 
