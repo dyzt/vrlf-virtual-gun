@@ -48,4 +48,28 @@ TEST(make_report_passes_in_range_values_through) {
     CHECK_EQ(r.buttons, 3);
 }
 
+TEST(pinned_prefix_is_fixed_per_lane) {
+    CHECK(vgun::pinned_prefix(0) == L"2&56524c30&0");
+    CHECK(vgun::pinned_prefix(7) == L"2&56524c37&0");
+}
+
+TEST(pinned_ids_and_path_match_what_windows_reports) {
+    CHECK(vgun::pinned_hid_instance_id(0) == L"HID\\HID_DEVICE_SYSTEM_VHF\\2&56524c30&0&0000");
+    CHECK(vgun::pinned_device_path(3) ==
+          L"\\\\?\\HID#HID_DEVICE_SYSTEM_VHF#2&56524c33&0&0000#{378de44c-56ef-11d1-bc8c-00a0c91405dd}");
+    CHECK(vgun::same_id(L"HID\\HID_DEVICE_SYSTEM_VHF\\2&56524C30&0&0000", vgun::pinned_hid_instance_id(0)));
+    CHECK(!vgun::same_id(L"HID\\HID_DEVICE_SYSTEM_VHF\\2&33377591&0&0000", vgun::pinned_hid_instance_id(0)));
+}
+
+TEST(lane_key_names_follow_the_root_prefix) {
+    CHECK(vgun::lane_instance_name(2) == L"VRLFGun2");
+    CHECK(vgun::lane_key_name(L"1&39b203ef&4", 1) == L"1&39b203ef&4&VRLFGun1");
+    CHECK(vgun::is_lane_key_of(L"1&39b203ef&4&VRLFGun1", 1));
+    CHECK(vgun::is_lane_key_of(L"VHF\\HID_DEVICE_SYSTEM_VHF\\1&39B203EF&4&VRLFGUN1", 1));
+    CHECK(!vgun::is_lane_key_of(L"1&39b203ef&4&VRLFGun1", 0));
+    CHECK(!vgun::is_lane_key_of(L"1&39b203ef&4&VRLFGun11", 1));
+    CHECK(!vgun::is_lane_key_of(L"1&39b203ef&0&{8317515c-289f-59a6-a2d4-0369baa25b50}", 0));
+    CHECK(!vgun::is_lane_key_of(L"Gun1", 1));
+}
+
 int main() { return run_all(); }

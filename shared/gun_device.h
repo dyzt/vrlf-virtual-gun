@@ -12,6 +12,11 @@
 #define VGUN_REPORT_BYTES 5
 #define VGUN_MAX_LANES 8
 #define VGUN_INSTANCE_ID_FORMAT L"VRLFGun%u"
+/* Setup pins every lane's VHF devnode ParentIdPrefix to this value, so lane N's Raw Input
+ * path is identical on every PC ("56524c" is "VRL"; the last hex digit is the lane). */
+#define VGUN_PINNED_PREFIX_FORMAT L"2&56524c3%x&0"
+#define VGUN_VHF_HARDWARE_ID L"HID_DEVICE_SYSTEM_VHF"
+#define VGUN_MOUSE_INTERFACE_GUID L"{378de44c-56ef-11d1-bc8c-00a0c91405dd}"
 
 /* Absolute mouse: 5 buttons, 3 padding bits, X and Y 16-bit 0..32767, no report ID. */
 static const unsigned char VGUN_REPORT_DESCRIPTOR[] = {
@@ -29,6 +34,8 @@ static const unsigned char VGUN_REPORT_DESCRIPTOR[] = {
 
 #ifdef __cplusplus
 #include <cstdint>
+#include <cwchar>
+#include <string>
 
 namespace vgun {
 
@@ -52,6 +59,40 @@ inline GunReport make_report(int x, int y, int buttons) {
     r.x = clamp_coord(x);
     r.y = clamp_coord(y);
     return r;
+}
+
+inline bool same_id(const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) == 0; }
+
+inline std::wstring lane_instance_name(unsigned lane) {
+    wchar_t buf[16];
+    swprintf(buf, 16, VGUN_INSTANCE_ID_FORMAT, lane);
+    return buf;
+}
+
+inline std::wstring pinned_prefix(unsigned lane) {
+    wchar_t buf[16];
+    swprintf(buf, 16, VGUN_PINNED_PREFIX_FORMAT, lane);
+    return buf;
+}
+
+inline std::wstring pinned_hid_instance_id(unsigned lane) {
+    return std::wstring(L"HID\\") + VGUN_VHF_HARDWARE_ID + L"\\" + pinned_prefix(lane) + L"&0000";
+}
+
+inline std::wstring pinned_device_path(unsigned lane) {
+    return std::wstring(L"\\\\?\\HID#") + VGUN_VHF_HARDWARE_ID + L"#" + pinned_prefix(lane) + L"&0000#" +
+           VGUN_MOUSE_INTERFACE_GUID;
+}
+
+/* A lane's VHF devnode key under Enum\VHF\HID_DEVICE_SYSTEM_VHF. */
+inline std::wstring lane_key_name(const std::wstring& root_prefix, unsigned lane) {
+    return root_prefix + L"&" + lane_instance_name(lane);
+}
+
+/* Does a lane key name or VHF instance ID end in "&VRLFGun<lane>" (any case)? */
+inline bool is_lane_key_of(const std::wstring& name, unsigned lane) {
+    const std::wstring suffix = L"&" + lane_instance_name(lane);
+    return name.size() >= suffix.size() && same_id(name.substr(name.size() - suffix.size()), suffix);
 }
 
 }  // namespace vgun
