@@ -87,7 +87,8 @@ def build_cli():
     srcs = quoted(["tools/vgun_cli.cpp", "third_party/winuhid/WinUHid.cpp"])
     winuhid = os.path.join(ROOT, "third_party", "winuhid")
     driver = os.path.join(ROOT, "driver")
-    run_msvc(f'{CXX} /DWINUHID_STATIC /I"{ROOT}" /I"{winuhid}" /I"{driver}" {srcs} /Fe:vgun_cli.exe', d)
+    run_msvc(f'{CXX} /DWINUHID_STATIC /I"{ROOT}" /I"{winuhid}" /I"{driver}" {srcs} /Fe:vgun_cli.exe '
+             "/link cfgmgr32.lib", d)
 
 
 def build_probe():

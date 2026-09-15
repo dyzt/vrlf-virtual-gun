@@ -33,6 +33,11 @@ class GunCli:
     def destroy(self, lane):
         self._cmd(f"destroy {lane}")
 
+    def hid(self, lane):
+        """Instance ID of the lane's started HID mouse, or "" while it has none."""
+        parts = self._cmd(f"hid {lane}")
+        return "" if parts[2] == "-" else parts[2]
+
     def quit(self):
         self._cmd("quit")
         self.p.wait(5)

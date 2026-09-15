@@ -8,6 +8,7 @@
 
 #include "WinUHid.h"
 #include "shared/gun_device.h"
+#include "shared/lane_devnode.h"
 
 namespace {
 
@@ -76,6 +77,9 @@ int main() {
             const DWORD err = submit(lane, x, y, buttons);
             if (err == 0) std::printf("sent %u\n", lane);
             else std::printf("err %u %lu\n", lane, err);
+        } else if (std::sscanf(line, "hid %u", &lane) == 1) {
+            const std::wstring id = lane < VGUN_MAX_LANES ? vgun::lane_hid_instance_id(lane) : std::wstring();
+            std::printf("hid %u %ls\n", lane, id.empty() ? L"-" : id.c_str());
         } else if (std::sscanf(line, "destroy %u", &lane) == 1) {
             destroy(lane);
             std::printf("gone %u\n", lane);
