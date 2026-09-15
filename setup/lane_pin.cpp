@@ -21,6 +21,8 @@ constexpr const wchar_t* VHF_KEY = L"SYSTEM\\CurrentControlSet\\Enum\\VHF\\HID_D
 constexpr auto POLL = std::chrono::milliseconds(100);
 constexpr auto MOUSE_TIMEOUT = std::chrono::seconds(15);
 constexpr auto GONE_TIMEOUT = std::chrono::seconds(10);
+// The driver was just installed or restarted on its node; give its control device time to appear.
+constexpr auto DRIVER_TIMEOUT = std::chrono::seconds(10);
 constexpr int MAX_ROUNDS = 4;
 
 std::wstring ReadString(const std::wstring& subkey, const wchar_t* value) {
@@ -153,7 +155,7 @@ bool PinLane(const std::wstring& root_id, unsigned lane) {
 
 PinSummary PinLanes() {
     PinSummary summary;
-    if (WinUHidGetDriverInterfaceVersion() == 0) {
+    if (!WaitFor(DRIVER_TIMEOUT, [](unsigned) { return WinUHidGetDriverInterfaceVersion() != 0; }, 0)) {
         Log(L"virtual gun driver not running (%lu); lanes not pinned", GetLastError());
         summary.driver_unavailable = true;
         return summary;
