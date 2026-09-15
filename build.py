@@ -104,16 +104,19 @@ def build_setup(version):
         f.write(f'#pragma once\n#define VGUN_VERSION L"{version}"\n')
     srcs = quoted([
         "setup/main.cpp", "setup/install_flow.cpp", "setup/cert_sign.cpp",
-        "setup/driver_install.cpp", "setup/payload.cpp",
-        "setup/registry_state.cpp", "setup/log.cpp",
+        "setup/driver_install.cpp", "setup/lane_pin.cpp", "setup/payload.cpp",
+        "setup/registry_state.cpp", "setup/log.cpp", "third_party/winuhid/WinUHid.cpp",
     ])
+    winuhid = os.path.join(ROOT, "third_party", "winuhid")
+    driver = os.path.join(ROOT, "driver")
     # /MANIFEST:EMBED: bare /MANIFEST (the linker default) writes a side-by-side
     # .manifest file instead, which Windows still honours but which a byte search
     # of the exe itself would never find.
-    run_msvc(f'{CXX} /I"{ROOT}" /I"{gen}" {srcs} /Fe:vrlf-virtual-gun-setup.exe /link '
+    run_msvc(f'{CXX} /DWINUHID_STATIC /I"{ROOT}" /I"{gen}" /I"{winuhid}" /I"{driver}" {srcs} '
+             "/Fe:vrlf-virtual-gun-setup.exe /link "
              "/MANIFEST:EMBED "
              "/MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\" "
-             "crypt32.lib ncrypt.lib setupapi.lib newdev.lib advapi32.lib ole32.lib", d)
+             "crypt32.lib ncrypt.lib setupapi.lib newdev.lib advapi32.lib ole32.lib cfgmgr32.lib", d)
 
 
 PAYLOAD = [
@@ -150,7 +153,7 @@ def build_package(version):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("target", nargs="?", default="tests")
-    ap.add_argument("--version", default="1.0.2")
+    ap.add_argument("--version", default="1.0.3")
     args = ap.parse_args()
     targets = {
         "tests": lambda: build_tests(),

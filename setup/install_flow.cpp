@@ -5,6 +5,7 @@
 #include "setup/cert_sign.h"
 #include "setup/driver_install.h"
 #include "setup/install_mode.h"
+#include "setup/lane_pin.h"
 #include "setup/log.h"
 #include "setup/payload.h"
 #include "setup/registry_state.h"
@@ -14,6 +15,20 @@ namespace setup {
 namespace {
 
 bool SameName(const std::wstring& a, const std::wstring& b) { return _wcsicmp(a.c_str(), b.c_str()) == 0; }
+
+// The install is complete when this runs; a pin failure is reported, never rolled back, and a
+// re-run of install retries it.
+int FinishWithPins(int install_code) {
+    const PinSummary pins = PinLanes();
+    if (pins.driver_unavailable && install_code == 3010) {
+        Log(L"virtual gun device paths not pinned yet: reboot, then run install again");
+    } else if (pins.driver_unavailable) {
+        Log(L"virtual gun device paths not pinned: the driver could not be opened; run install again");
+    } else if (pins.failed > 0) {
+        Log(L"%d virtual gun lane(s) not pinned; run install again", pins.failed);
+    }
+    return PinExitCode(install_code, pins);
+}
 
 int Fail(const std::wstring& error) {
     Log(L"install failed: %ls; rolling back", error.c_str());
@@ -91,7 +106,7 @@ int RunUpdate(const InstallState& old, const std::wstring& payload_dir, const st
             return 1;
         }
         Log(L"VRLF Virtual Lightgun %ls reinstalled in place", version.c_str());
-        return reboot ? 3010 : 0;
+        return FinishWithPins(reboot ? 3010 : 0);
     }
 
     // The device runs the new package. Record the old pair as Previous* before promoting the
@@ -112,7 +127,7 @@ int RunUpdate(const InstallState& old, const std::wstring& payload_dir, const st
         return 1;
     }
     Log(L"VRLF Virtual Lightgun updated %ls -> %ls", old.version.c_str(), version.c_str());
-    return reboot ? 3010 : 0;
+    return FinishWithPins(reboot ? 3010 : 0);
 }
 
 }  // namespace
@@ -165,7 +180,7 @@ int RunInstall(const std::wstring& payload_dir, const std::wstring& version) {
 
     if (!WriteValue(L"Version", version)) return Fail(L"registry write Version failed");
     Log(L"VRLF Virtual Lightgun %ls installed", version.c_str());
-    return reboot ? 3010 : 0;
+    return FinishWithPins(reboot ? 3010 : 0);
 }
 
 int RunUninstall() {

@@ -14,7 +14,8 @@ By hand: unzip a release, run `vrlf-virtual-gun-setup.exe install` as administra
 - Trusts the public certificate in `LocalMachine\Root` and `TrustedPublisher`.
 - Installs the `Root\VRLFVirtualGun` driver.
 - Records state under `HKLM\SOFTWARE\VRLF\VirtualGun`; uninstall removes all of it.
-- Over an existing install, updates in place: the device node is kept and only the driver, certificate and package are replaced, so the Raw Input device paths games have bound (TeknoParrot's RawInput API) stay the same. An incomplete or damaged install is removed and reinstalled instead, which changes those paths.
+- Over an existing install, updates in place: the device node is kept and only the driver, certificate and package are replaced. An incomplete or damaged install is removed and reinstalled instead.
+- Pins each virtual gun's Raw Input device path, so lane N is `\\?\HID#HID_DEVICE_SYSTEM_VHF#2&56524c3N&0&0000#{378de44c-56ef-11d1-bc8c-00a0c91405dd}` on every PC and bindings that store device paths (TeknoParrot's RawInput API, MAME, Flycast) can be shared. Install writes each lane's `ParentIdPrefix` under `HKLM\SYSTEM\CurrentControlSet\Enum\VHF\HID_DEVICE_SYSTEM_VHF`, creating a lane once first if Windows has not seen it yet. If the paths are ever lost (a Windows feature upgrade), run install again. If install needs a reboot first, it says so; reboot and run install again.
 - Uninstall renames a still-running installer aside and removes it at the next reboot, so a reinstall before that reboot is safe.
 
 ## What the driver does
@@ -33,9 +34,10 @@ The device reports VID `0x1209` (pid.codes) with PID `0x5647`, requested for thi
 Needs MSVC 2026, WDK 10.0.26100 and Python 3.
 
 - `python build.py tests`
-- `python build.py package --version 1.0.2`
+- `python build.py package --version 1.0.3`
 - `python build.py cli` then `python tests/integration/smoke_cli.py` (no admin)
 - `python tests/integration/test_installed_driver.py` (driver installed)
+- `python tests/integration/lane_paths.py pinned` (driver installed: every lane is on its pinned path)
 - `python tests/integration/lane_paths.py save`, install an update, then `python tests/integration/lane_paths.py compare`
 - `python tests/integration/check_store_signature.py` (the driver store copy is signed by the one trusted certificate)
 

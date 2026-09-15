@@ -58,6 +58,37 @@ size_t CountDevices(bool present_only) {
     return count;
 }
 
+std::wstring LiveRootInstanceId() {
+    HDEVINFO set = SetupDiGetClassDevsW(nullptr, nullptr, nullptr, DIGCF_ALLCLASSES | DIGCF_PRESENT);
+    if (set == INVALID_HANDLE_VALUE) return L"";
+    std::wstring found;
+    size_t count = 0;
+    SP_DEVINFO_DATA dev{sizeof(SP_DEVINFO_DATA)};
+    for (DWORD i = 0; SetupDiEnumDeviceInfo(set, i, &dev); ++i) {
+        if (!IsOurDevice(set, dev)) continue;
+        wchar_t id[MAX_DEVICE_ID_LEN] = {};
+        if (SetupDiGetDeviceInstanceIdW(set, &dev, id, MAX_DEVICE_ID_LEN, nullptr)) found = id;
+        ++count;
+    }
+    SetupDiDestroyDeviceInfoList(set);
+    return count == 1 ? found : L"";
+}
+
+bool RemoveDeviceInstance(const std::wstring& instance_id) {
+    HDEVINFO set = SetupDiCreateDeviceInfoList(nullptr, nullptr);
+    if (set == INVALID_HANDLE_VALUE) return false;
+    SP_DEVINFO_DATA dev{sizeof(SP_DEVINFO_DATA)};
+    const bool ok = SetupDiOpenDeviceInfoW(set, instance_id.c_str(), nullptr, 0, &dev) &&
+                    DiUninstallDevice(nullptr, set, &dev, 0, nullptr);
+    if (!ok) {
+        Log(L"removing %ls failed: %lu", instance_id.c_str(), GetLastError());
+    } else {
+        Log(L"removed %ls", instance_id.c_str());
+    }
+    SetupDiDestroyDeviceInfoList(set);
+    return ok;
+}
+
 size_t RemoveDevices() {
     HDEVINFO set = SetupDiGetClassDevsW(nullptr, nullptr, nullptr, DIGCF_ALLCLASSES);
     if (set == INVALID_HANDLE_VALUE) return 0;

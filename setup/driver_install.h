@@ -24,5 +24,10 @@ size_t CountDevices(bool present_only);
 size_t RemoveDevices();
 // RemoveDevices, then deletes the published package when one is named.
 void UninstallDriver(const std::wstring& published_inf);
+// Instance ID of the one present devnode whose first hardware ID is HARDWARE_ID; empty when
+// there are none or several.
+std::wstring LiveRootInstanceId();
+// Removes one devnode, present or not, by instance ID. True when it is gone.
+bool RemoveDeviceInstance(const std::wstring& instance_id);
 
 }  // namespace setup
