@@ -1,4 +1,5 @@
 #include "setup/install_mode.h"
+#include "setup/lane_pin_rules.h"
 #include "setup/strings.h"
 #include "tests/test_main.h"
 
@@ -68,6 +69,63 @@ TEST(multi_sz_has_double_terminator) {
     CHECK(s[8] == L'\0');
     CHECK(s[9] == L'\0');
     CHECK(s.substr(0, 6) == L"Root\\A");
+}
+
+namespace {
+const std::wstring PIN0 = L"2&56524c30&0";
+setup::LaneKey Key(bool exists, bool installed, const wchar_t* prefix) {
+    setup::LaneKey k;
+    k.exists = exists;
+    k.installed = installed;
+    k.prefix = prefix;
+    return k;
+}
+}  // namespace
+
+TEST(pin_decision_covers_every_key_state) {
+    using setup::PinAction;
+    CHECK(setup::DecidePin(Key(false, false, L""), PIN0, false) == PinAction::CreateFirst);
+    CHECK(setup::DecidePin(Key(true, false, L"2&56524c30&0"), PIN0, false) == PinAction::RemoveThenCreate);
+    CHECK(setup::DecidePin(Key(true, true, L"2&56524C30&0"), PIN0, true) == PinAction::AlreadyPinned);
+    CHECK(setup::DecidePin(Key(true, true, L"2&33377591&0"), PIN0, false) == PinAction::Write);
+    CHECK(setup::DecidePin(Key(true, true, L""), PIN0, false) == PinAction::Write);
+    CHECK(setup::DecidePin(Key(true, true, L"2&33377591&0"), PIN0, true) == PinAction::Collision);
+}
+
+TEST(collision_ignores_the_target_and_the_same_lanes_orphans) {
+    const std::wstring target = L"1&39b203ef&4&VRLFGun0";
+    std::vector<setup::VhfKey> keys = {
+        {L"1&39b203ef&4&VRLFGun0", L"2&33377591&0"},
+        {L"1&aaaaaaaa&4&VRLFGun0", L"2&56524c30&0"},  // lane 0's orphan from an earlier install
+        {L"1&39b203ef&4&VRLFGun1", L"2&56524c31&0"},
+    };
+    CHECK(!setup::IsCollision(keys, target, 0, PIN0));
+    keys.push_back({L"1&39b203ef&0&{8317515c-289f-59a6-a2d4-0369baa25b50}", L"2&56524C30&0"});
+    CHECK(setup::IsCollision(keys, target, 0, PIN0));
+    std::vector<setup::VhfKey> other_lane = {{L"1&39b203ef&4&VRLFGun3", L"2&56524c30&0"}};
+    CHECK(setup::IsCollision(other_lane, target, 0, PIN0));
+}
+
+TEST(installed_lane_key_needs_a_driver_and_no_failed_install_flag) {
+    CHECK(setup::IsInstalledLaneKey(true, 0));
+    CHECK(!setup::IsInstalledLaneKey(false, 0));
+    CHECK(!setup::IsInstalledLaneKey(true, 0x40));
+    CHECK(!setup::IsInstalledLaneKey(false, 0x40));
+    CHECK(setup::IsInstalledLaneKey(true, 0x20));
+}
+
+TEST(pin_exit_code_never_hides_a_failure) {
+    setup::PinSummary ok;
+    CHECK(setup::PinExitCode(0, ok) == 0);
+    CHECK(setup::PinExitCode(3010, ok) == 3010);
+    setup::PinSummary no_driver;
+    no_driver.driver_unavailable = true;
+    CHECK(setup::PinExitCode(3010, no_driver) == 3010);
+    CHECK(setup::PinExitCode(0, no_driver) == 1);
+    setup::PinSummary one_failed;
+    one_failed.failed = 1;
+    CHECK(setup::PinExitCode(0, one_failed) == 1);
+    CHECK(setup::PinExitCode(3010, one_failed) == 1);
 }
 
 int main() { return run_all(); }
