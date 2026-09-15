@@ -1,6 +1,6 @@
 """Checks, records or compares the Raw Input device path of each virtual gun lane.
 
-Games that bind by device path (TeknoParrot's RawInput API) only share bindings between
+Games that bind by device path only share bindings between
 PCs when every lane is on its pinned path, which install sets. `pinned` checks all 8
 lanes without clicking; exit 0 = all pinned. `save` before installing an update and
 `compare` after it check that paths did not move. Exit 0 = same paths.
