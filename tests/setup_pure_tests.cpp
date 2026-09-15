@@ -1,7 +1,11 @@
 #include "setup/install_mode.h"
 #include "setup/lane_pin_rules.h"
+#include "setup/setup_lock.h"
 #include "setup/strings.h"
 #include "tests/test_main.h"
+
+#include <string>
+#include <thread>
 
 using setup::ChooseInstallMode;
 using setup::InstallMode;
@@ -126,6 +130,33 @@ TEST(pin_exit_code_never_hides_a_failure) {
     one_failed.failed = 1;
     CHECK(setup::PinExitCode(0, one_failed) == 1);
     CHECK(setup::PinExitCode(3010, one_failed) == 1);
+}
+
+TEST(setup_lock_is_busy_while_another_run_holds_it) {
+    const std::wstring name = L"Local\\VRLFVirtualGunSetupTest-" + std::to_wstring(GetCurrentProcessId());
+    setup::SetupLock mine(name.c_str());
+    {
+        setup::SetupLock theirs(name.c_str());
+        CHECK(theirs.Acquire(0) == setup::LockResult::Held);
+        // A mutex is re-entrant on its owning thread, so the second run has to be another thread.
+        setup::LockResult seen = setup::LockResult::Held;
+        std::thread([&] { seen = mine.Acquire(0); }).join();
+        CHECK(seen == setup::LockResult::Busy);
+    }
+    setup::LockResult after = setup::LockResult::Busy;
+    std::thread([&] {
+        setup::SetupLock again(name.c_str());
+        after = again.Acquire(0);
+    }).join();
+    CHECK(after == setup::LockResult::Held);
+}
+
+TEST(setup_lock_left_by_a_crashed_run_is_taken_over) {
+    const std::wstring name = L"Local\\VRLFVirtualGunSetupCrash-" + std::to_wstring(GetCurrentProcessId());
+    auto* crashed = new setup::SetupLock(name.c_str());
+    std::thread([&] { CHECK(crashed->Acquire(0) == setup::LockResult::Held); }).join();  // exits holding it
+    setup::SetupLock next(name.c_str());
+    CHECK(next.Acquire(0) == setup::LockResult::Held);
 }
 
 int main() { return run_all(); }
